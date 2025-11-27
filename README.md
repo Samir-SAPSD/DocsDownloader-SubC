@@ -17,6 +17,10 @@ A maneira mais fácil de executar o projeto é utilizando o script de inicializa
 2. Dê um **duplo clique** nele.
 3. O script irá tentar executar a aplicação utilizando o Python instalado no sistema ou o Anaconda.
 
+## Atualização
+
+O arquivo **`att.bat`** é responsável por atualizar a aplicação. Ele realiza o download da versão mais recente do repositório e substitui os arquivos no diretório de destino (configurado como `C:\DocsDownloader-SubC`).
+
 ## Scripts Principais
 
 ### `src/downloadFiles.py`
