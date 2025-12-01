@@ -1,31 +1,24 @@
 @echo off
 chcp 65001 > nul
-echo ==========================================
-echo Executando a aplicação...
-echo ==========================================
-echo Tentando executar com Python...
-call python src/downloadFiles.py
-if %errorlevel% equ 0 goto :success
 
-echo.
-echo Execução com Python falhou. Tentando via Anaconda (caminho absoluto)...
-call "C:\ProgramData\anaconda3\python.exe" src/downloadFiles.py
-if %errorlevel% neq 0 (
-    echo Erro na execução do script Python (Python e Anaconda falharam).
-    goto :error
+:: 1. Verifica se o Python no PATH tem as dependências
+python -c "import customtkinter" >nul 2>nul
+if %errorlevel% equ 0 (
+    start "" pythonw src/downloadFiles.py
+    exit
 )
 
-:success
-echo.
-echo Aplicação finalizada com sucesso.
-pause
-exit /b 0
+:: 2. Se falhou, tenta o Anaconda (caminho absoluto)
+if exist "C:\ProgramData\anaconda3\pythonw.exe" (
+    start "" "C:\ProgramData\anaconda3\pythonw.exe" src/downloadFiles.py
+    exit
+)
 
-:error
+:: 3. Se chegou aqui, erro
 echo.
 echo ==========================================
-echo OCORREU UM ERRO DURANTE A EXECUÇÃO
+echo ERRO: Não foi possível iniciar a aplicação.
 echo ==========================================
-echo A janela será fechada após pressionar uma tecla...
+echo Verifique se o Python está instalado e se 'customtkinter' está presente.
 pause
 exit /b 1

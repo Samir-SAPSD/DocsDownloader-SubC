@@ -32,8 +32,6 @@ try {
 catch {
     Write-Error "ERRO CRÍTICO AO CONECTAR: $_"
     Write-Host "Detalhes do erro: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Pressione qualquer tecla para sair..."
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     exit 1
 }
 

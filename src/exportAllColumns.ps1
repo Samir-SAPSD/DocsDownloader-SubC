@@ -30,8 +30,8 @@ $pseudoMap = @{
     "LinkTitleNoMenu"    = "Title"
     "LinkFilename"       = "FileLeafRef"
     "LinkFilenameNoMenu" = "FileLeafRef"
-    "Edit"               = "" # Skip edit button
-    "DocIcon"            = "" # Skip icon
+    "Edit"               = "" 
+    "DocIcon"            = "" 
 }
 
 # 4. Build the Columns List based strictly on the View Order
@@ -39,31 +39,17 @@ $usedNames = @{ }
 $columns = @()
 
 # === ADIÇÃO: Força a inclusão da coluna ID no início ===
-$columns += [pscustomobject]@{
-    Internal = "ID"
-    Title    = "ID"
-}
+$columns += [pscustomobject]@{ Internal = "ID"; Title = "ID" }
 $usedNames["ID"] = 1
-# ======================================================
 
 foreach ($vf in $view.ViewFields) {
-    # Resolve real internal name
     $realInternalName = if ($pseudoMap.ContainsKey($vf)) { $pseudoMap[$vf] } else { $vf }
-    
-    # Skip if mapped to empty (like Edit button)
     if ([string]::IsNullOrEmpty($realInternalName)) { continue }
-
-    # === ADIÇÃO: Pula se for ID (pois já adicionamos manualmente acima) ===
     if ($realInternalName -eq "ID") { continue }
-    # =====================================================================
 
-    # Find the field definition to get the Display Title
     $fDef = $allFields | Where-Object { $_.InternalName -eq $realInternalName }
-    
-    # Determine Title (Display Name or Internal if not found)
     $title = if ($fDef -and -not [string]::IsNullOrWhiteSpace($fDef.Title)) { $fDef.Title } else { $realInternalName }
 
-    # Handle duplicate titles in the header
     if ($usedNames.ContainsKey($title)) {
         $usedNames[$title]++
         $title = "$title ($($usedNames[$title]))"
@@ -71,61 +57,85 @@ foreach ($vf in $view.ViewFields) {
         $usedNames[$title] = 1
     }
 
-    $columns += [pscustomobject]@{
-        Internal = $realInternalName
-        Title    = $title
-    }
+    $columns += [pscustomobject]@{ Internal = $realInternalName; Title = $title }
 }
 
 Write-Host "Colunas encontradas: $($columns.Count)" -ForegroundColor Gray
 
-# ==== COLLECTING ITEMS ====
-# We explicitly request the fields we identified to ensure we get the data
+# ==== COLLECTING ITEMS (OPTIMIZED) ====
+Write-Host "Baixando itens ..." -ForegroundColor Cyan
 $fieldsToLoad = $columns.Internal | Select-Object -Unique
-$items = Get-PnPListItem -List $listGuid -PageSize 2000 -Fields $fieldsToLoad
+$items = Get-PnPListItem -List $listGuid -Fields $fieldsToLoad
 
-# ==== FUNCTION TO NORMALIZE VALUES (ROBUST) ====
-# Adapted from exportSharepoint.ps1 to handle more types
-function Resolve-SharePointField {
-    param([Parameter(ValueFromPipeline=$true)]$Value)
-    if ($null -eq $Value) { return "" }
+# ==== TRANSFORMING TO OBJECTS (OPTIMIZED) ====
+Write-Host "Processando $($items.Count) registros..." -ForegroundColor Cyan
 
-    $typeName = $Value.GetType().Name
-    switch ($typeName) {
-        "FieldLookupValue" { return $Value.LookupValue }
-        "FieldUserValue"   { return $Value.LookupValue }
-        "FieldUrlValue"    { return if ($Value.Description) { $Value.Description } else { $Value.Url } }
-        "DateTime"         { return $Value.ToString("yyyy-MM-dd HH:mm") }
-        "Boolean"          { return if ($Value) { "Sim" } else { "Não" } }
+# Otimização: Lista Genérica para performance
+$dataList = New-Object System.Collections.Generic.List[object]
 
-        # Managed Metadata (if applicable)
-        "TaxonomyFieldValue"          { return $Value.Label }
-        "TaxonomyFieldValueCollection"{ return ($Value | ForEach-Object { $_.Label }) -join "; " }
-
-        default {
-            if ($Value -is [System.Array]) {
-                return ($Value | ForEach-Object { Resolve-SharePointField $_ }) -join "; "
-            }
-            return $Value.ToString()
-        }
-    }
-}
-
-# ==== TRANSFORMING TO OBJECTS ====
-$data = foreach ($item in $items) {
+foreach ($item in $items) {
     $o = [ordered]@{}
+    
+    # Otimização: Acesso direto ao dicionário de valores (evita chamadas COM)
+    $fieldValues = $item.FieldValues
+    
     foreach ($col in $columns) {
-        try {
-            # Access property safely using Internal Name
-            $val = $item[$col.Internal]
-            # Map to Display Name in the output object
-            $o[$col.Title] = Resolve-SharePointField $val
-        } catch {
-            # If field is missing in the item object (e.g. computed column), leave blank
+        $key = $col.Internal
+        $val = $null
+        
+        # Tenta pegar do dicionário (Rápido)
+        if ($fieldValues.ContainsKey($key)) {
+            $val = $fieldValues[$key]
+        } else {
+            # Fallback (Lento, para colunas computadas)
+            try { $val = $item[$key] } catch {}
+        }
+
+        # Lógica In-Line (Remove overhead de função)
+        if ($null -eq $val) {
             $o[$col.Title] = ""
         }
+        else {
+            # Verificações de tipo otimizadas
+            if ($val -is [Microsoft.SharePoint.Client.FieldLookupValue]) {
+                $o[$col.Title] = $val.LookupValue
+            }
+            elseif ($val -is [Microsoft.SharePoint.Client.FieldUserValue]) {
+                $o[$col.Title] = $val.LookupValue
+            }
+            elseif ($val -is [string]) {
+                $o[$col.Title] = $val
+            }
+            elseif ($val -is [DateTime]) {
+                $o[$col.Title] = $val.ToString("yyyy-MM-dd HH:mm")
+            }
+            elseif ($val -is [bool]) {
+                $o[$col.Title] = if ($val) { "Sim" } else { "Não" }
+            }
+            elseif ($val -is [Microsoft.SharePoint.Client.FieldUrlValue]) {
+                $o[$col.Title] = if ($val.Description) { $val.Description } else { $val.Url }
+            }
+            # Taxonomy (Verificação por nome para evitar erro de assembly)
+            elseif ($val.GetType().Name -like "*TaxonomyFieldValue*") {
+                try { $o[$col.Title] = $val.Label } catch { $o[$col.Title] = $val.ToString() }
+            }
+            # Arrays (Multi-choice/User)
+            elseif ($val -is [System.Collections.IEnumerable]) {
+                $parts = @()
+                foreach ($sub in $val) {
+                    if ($sub -is [Microsoft.SharePoint.Client.FieldLookupValue]) { $parts += $sub.LookupValue }
+                    elseif ($sub -is [Microsoft.SharePoint.Client.FieldUserValue]) { $parts += $sub.LookupValue }
+                    elseif ($sub.GetType().Name -like "*TaxonomyFieldValue*") { try { $parts += $sub.Label } catch { $parts += $sub.ToString() } }
+                    else { $parts += $sub.ToString() }
+                }
+                $o[$col.Title] = $parts -join "; "
+            }
+            else {
+                $o[$col.Title] = $val.ToString()
+            }
+        }
     }
-    [pscustomobject]$o
+    $dataList.Add([pscustomobject]$o)
 }
 
 # ==== EXPORT TO EXCEL ====
@@ -135,7 +145,8 @@ if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
 }
 Import-Module ImportExcel
 
-$data |
+Write-Host "Gerando Excel..." -ForegroundColor Cyan
+$dataList |
     Export-Excel `
         -Path $outputXlsx `
         -WorksheetName "DefaultView" `

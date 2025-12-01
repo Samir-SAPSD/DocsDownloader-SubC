@@ -4,9 +4,12 @@ Este projeto é uma aplicação com interface gráfica (GUI) desenvolvida em Pyt
 
 ## Funcionalidades
 
-- **Interface Gráfica**: Visualização amigável dos dados do SharePoint.
+- **Interface Gráfica Moderna**: Visualização amigável em Dark Mode (via `customtkinter`).
+- **Zoom e Acessibilidade**: Controles de zoom (🔍) para ajustar o tamanho do texto e da tabela dinamicamente.
+- **Feedback Visual**: Barra de progresso para acompanhar operações de sincronização e download.
 - **Conexão Segura**: Utiliza `PnP.PowerShell` para autenticação e conexão.
 - **Download de Anexos**: Permite selecionar itens e baixar seus anexos automaticamente.
+- **Sincronização Otimizada**: Scripts de alta performance para baixar grandes volumes de dados rapidamente.
 - **Exportação de Dados**: Gera relatórios em Excel.
 
 ## Como Usar (Recomendado)
@@ -15,7 +18,7 @@ A maneira mais fácil de executar o projeto é utilizando o script de inicializa
 
 1. Localize o arquivo **`iniciar.bat`** na raiz do projeto.
 2. Dê um **duplo clique** nele.
-3. O script irá tentar executar a aplicação utilizando o Python instalado no sistema ou o Anaconda.
+3. O script irá executar a aplicação em segundo plano (sem janela de terminal visível).
 
 ## Atualização
 
@@ -24,13 +27,13 @@ O arquivo **`att.bat`** é responsável por atualizar a aplicação. Ele realiza
 ## Scripts Principais
 
 ### `src/downloadFiles.py`
-A aplicação principal em Python. Responsável pela interface gráfica e por orquestrar as chamadas aos scripts de PowerShell.
+A aplicação principal em Python. Responsável pela interface gráfica moderna, gerenciamento de threads para não travar a tela e orquestração dos scripts.
 
 ### `src/downloadAttachments.ps1`
-Script PowerShell invocado pela aplicação Python para realizar o download efetivo dos anexos dos itens selecionados.
+Script PowerShell robusto para realizar o download dos anexos, com tratamento de erros e execução em background.
 
 ### `src/exportAllColumns.ps1`
-Script PowerShell para exportar dados completos das listas do SharePoint.
+Script PowerShell altamente otimizado para exportar dados completos das listas do SharePoint com máxima velocidade.
 
 ## Pré-requisitos
 
@@ -40,6 +43,7 @@ Script PowerShell para exportar dados completos das listas do SharePoint.
     - `PnP.PowerShell`
     - `ImportExcel`
 - Bibliotecas Python (listadas em `requirements.txt`):
+    - `customtkinter`
     - `pandas`
     - `openpyxl`
 
